@@ -32,16 +32,80 @@ async function initSeasons() {
       activeSeason = pill.dataset.season;
       const activeView = document.querySelector('.nav-btn.active')?.dataset.view || 'home';
       clearView(activeView);
-      loadView(activeView);
+      showSkeleton(activeView);
       updateSeasonLabels();
+      loadView(activeView);
     });
   });
 
   updateSeasonLabels();
+
+  // Show skeleton immediately on first load, then fetch after 0.5s delay
+  showSkeleton('home');
+  await new Promise(r => setTimeout(r, 500));
   loadHome();
 }
 
-// Per-season cache
+// ---- Skeleton loaders ----
+function skelCards(n, cols = 'repeat(auto-fill, minmax(180px, 1fr))') {
+  return `<div class="skel-grid" style="grid-template-columns:${cols}">` +
+    Array(n).fill(`
+      <div class="skel-card">
+        <div class="skel skel-img"></div>
+        <div class="skel skel-h"></div>
+        <div class="skel skel-h-sm"></div>
+        <div class="skel skel-h-xs"></div>
+      </div>`).join('') + '</div>';
+}
+function skelRows(n) {
+  return Array(n).fill(`
+    <div class="skel-row">
+      <div class="skel skel-avatar"></div>
+      <div class="skel-lines">
+        <div class="skel skel-h"></div>
+        <div class="skel skel-h-sm"></div>
+      </div>
+      <div class="skel skel-bar"></div>
+    </div>`).join('');
+}
+function skelStats(n) {
+  return `<div class="skel-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">` +
+    Array(n).fill(`
+      <div class="skel-stat-card">
+        <div class="skel skel-h-xs"></div>
+        <div class="skel skel-h" style="width:50%"></div>
+        <div class="skel skel-h-sm"></div>
+      </div>`).join('') + '</div>';
+}
+
+function showSkeleton(view) {
+  switch (view) {
+    case 'home':
+      document.getElementById('home-cards').innerHTML = skelStats(4);
+      document.getElementById('last-race').innerHTML = skelRows(8);
+      break;
+    case 'races':
+      document.getElementById('races-grid').innerHTML =
+        skelCards(12, 'repeat(auto-fill, minmax(260px, 1fr))');
+      break;
+    case 'standings':
+      document.querySelector('#driver-standings-table tbody').innerHTML =
+        Array(12).fill(`<tr>${Array(6).fill('<td><div class="skel skel-h" style="margin:4px 0"></div></td>').join('')}</tr>`).join('');
+      break;
+    case 'drivers':
+      document.getElementById('drivers-grid').innerHTML =
+        skelCards(12, 'repeat(auto-fill, minmax(180px, 1fr))');
+      break;
+    case 'circuits':
+      document.getElementById('circuits-grid').innerHTML =
+        skelCards(10, 'repeat(auto-fill, minmax(260px, 1fr))');
+      break;
+    case 'teams':
+      document.getElementById('teams-grid').innerHTML =
+        skelCards(10, 'repeat(auto-fill, minmax(260px, 1fr))');
+      break;
+  }
+}
 const cache = {};
 function seasonCache(season) {
   if (!cache[season]) cache[season] = {};
@@ -86,22 +150,12 @@ const DRIVER_PHOTOS = {
   'hadjar':         'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/I/ISAHAD01_Isack_Hadjar/isahad01.png',
   'doohan':         'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/J/JACDOO01_Jack_Doohan/jacdoo01.png',
   'bortoleto':      'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/G/GABBAR01_Gabriel_Bortoleto/gabbar01.png',
+  'lindblad':       'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/A/ARVLIN01_Arvid_Lindblad/arvlin01.png',
 };
 function driverPhoto(id) { return DRIVER_PHOTOS[id] || null; }
 
 // ---- Utils ----
-function loader(on) {
-  document.getElementById('loader').classList.toggle('hidden', !on);
-  const bar = document.getElementById('progress-bar');
-  if (on) {
-    bar.style.width = '60%';
-    bar.classList.remove('done');
-  } else {
-    bar.style.width = '100%';
-    setTimeout(() => bar.classList.add('done'), 300);
-    setTimeout(() => { bar.style.width = '0%'; bar.classList.remove('done'); }, 620);
-  }
-}
+function loader(_on) { /* replaced by skeleton loaders */ }
 async function apiFetch(path) {
   const res = await fetch(path);
   if (!res.ok) throw new Error('API error');
@@ -117,12 +171,14 @@ function seasonLabel(s) { return SEASON_LABEL[s] || s; }
 
 function updateSeasonLabels() {
   const yr = seasonLabel(activeSeason);
-  const el = id => { const e = document.getElementById(id); if (e) e.textContent = e.textContent.replace(/20\d\d/, yr); };
   document.getElementById('hero-title').innerHTML = `${yr} Formula 1<br><span class="red">World Championship</span>`;
   document.getElementById('races-title').textContent = `${yr} Race Schedule`;
   document.getElementById('standings-title').textContent = `${yr} Standings`;
   document.getElementById('drivers-title').textContent = `${yr} Drivers`;
   document.getElementById('circuits-title').textContent = `${yr} Circuits`;
+  document.getElementById('teams-title').textContent = `${yr} Teams`;
+  const navLabel = document.getElementById('nav-season-label');
+  if (navLabel) navLabel.textContent = `${yr} Season`;
 }
 
 function clearView(view) {
@@ -134,20 +190,72 @@ function clearView(view) {
   }
   if (view === 'drivers') document.getElementById('drivers-grid').innerHTML = '';
   if (view === 'circuits') document.getElementById('circuits-grid').innerHTML = '';
+  if (view === 'teams') document.getElementById('teams-grid').innerHTML = '';
   if (view === 'home') {
     document.getElementById('home-cards').innerHTML = '';
     document.getElementById('last-race').innerHTML = '';
   }
 }
 
+// ---- Hamburger / curtain nav ----
+const hamburger = document.getElementById('hamburger');
+const navOverlay = document.getElementById('nav-overlay');
+let navOpen = false;
+
+function openNav() {
+  navOpen = true;
+  hamburger.classList.add('open');
+  navOverlay.classList.add('open');
+  document.querySelector('.site-header').classList.add('nav-is-open');
+  gsap.timeline()
+    .to(navOverlay, { '--p1': '100%', duration: 0.4, ease: 'power1.out' }, 0)
+    .to(navOverlay, { '--p2': '100%', duration: 0.4, ease: 'power1.out' }, 0.1)
+    .to(navOverlay, { '--p3': '100%', duration: 0.4, ease: 'power1.out' }, 0.2)
+    .to(navOverlay, { '--p4': '100%', duration: 0.4, ease: 'power1.out' }, 0.3);
+}
+
+function closeNav() {
+  navOpen = false;
+  hamburger.classList.remove('open');
+  document.querySelector('.site-header').classList.remove('nav-is-open');
+  gsap.timeline({ onComplete: () => navOverlay.classList.remove('open') })
+    .to(navOverlay, { '--p4': '0%', duration: 0.35, ease: 'power1.in' }, 0)
+    .to(navOverlay, { '--p3': '0%', duration: 0.35, ease: 'power1.in' }, 0.08)
+    .to(navOverlay, { '--p2': '0%', duration: 0.35, ease: 'power1.in' }, 0.16)
+    .to(navOverlay, { '--p1': '0%', duration: 0.35, ease: 'power1.in' }, 0.24);
+}
+
+hamburger.addEventListener('click', () => navOpen ? closeNav() : openNav());
+
+// Close on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && navOpen) closeNav(); });
+
 // ---- Navigation ----
 document.querySelectorAll('.nav-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+  btn.addEventListener('click', async () => {
     const view = btn.dataset.view;
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.view === view);
+    });
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(`view-${view}`).classList.add('active');
+    if (navOpen) closeNav();
+
+    // Show skeleton + 0.5s delay only on first visit (empty container)
+    const containers = {
+      home: () => document.getElementById('home-cards'),
+      races: () => document.getElementById('races-grid'),
+      standings: () => document.querySelector('#driver-standings-table tbody'),
+      drivers: () => document.getElementById('drivers-grid'),
+      circuits: () => document.getElementById('circuits-grid'),
+      teams: () => document.getElementById('teams-grid'),
+    };
+    const el = containers[view]?.();
+    if (el && !el.children.length) {
+      showSkeleton(view);
+      await new Promise(r => setTimeout(r, 500));
+    }
+
     loadView(view);
   });
 });
@@ -180,6 +288,7 @@ async function loadView(view) {
   else if (view === 'standings') await loadStandings();
   else if (view === 'drivers') await loadDrivers();
   else if (view === 'circuits') await loadCircuits();
+  else if (view === 'teams') await loadTeams();
 }
 
 // ---- HOME ----
@@ -258,7 +367,8 @@ function renderLastRace(race, yr) {
 
 // ---- RACES ----
 async function loadRaces() {
-  if (document.getElementById('races-grid').children.length) return;
+  const grid = document.getElementById('races-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
   loader(true);
   const s = activeSeason;
   try {
@@ -391,7 +501,8 @@ async function showRaceModal(round, season) {
 
 // ---- STANDINGS ----
 async function loadStandings() {
-  if (document.querySelector('#driver-standings-table tbody').children.length) return;
+  const tbody = document.querySelector('#driver-standings-table tbody');
+  if (tbody.children.length && !tbody.querySelector('.skel')) return;
   loader(true);
   const s = activeSeason;
   try {
@@ -437,7 +548,8 @@ function renderConstructorStandingsTable(selector, standings) {
 
 // ---- DRIVERS ----
 async function loadDrivers() {
-  if (document.getElementById('drivers-grid').children.length) return;
+  const grid = document.getElementById('drivers-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
   loader(true);
   const s = activeSeason;
   const yr = seasonLabel(s);
@@ -594,9 +706,250 @@ function circuitInfo(id) {
   return CIRCUIT_INFO[id] || null;
 }
 
+// ---- TEAMS ----
+const TEAMS = [
+  {
+    id: 'mclaren', name: 'McLaren', fullName: 'McLaren Formula 1 Team',
+    base: 'Woking, United Kingdom', principal: 'Andrea Stella',
+    chassis: 'MCL39', engine: 'Mercedes', drivers: ['norris', 'piastri'],
+    color: '#FF8000',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/mclaren-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/mclaren.png',
+    principalPhoto: null,
+    principalBio: 'Andrea Stella joined McLaren in 2015 as Performance Director after 13 years at Ferrari. Appointed Team Principal in 2023, he led McLaren to their first Constructors\' Championship since 1998 in 2024, transforming the team into a championship-winning outfit.',
+  },
+  {
+    id: 'ferrari', name: 'Ferrari', fullName: 'Scuderia Ferrari HP',
+    base: 'Maranello, Italy', principal: 'Frédéric Vasseur',
+    chassis: 'SF-26', engine: 'Ferrari', drivers: ['leclerc', 'hamilton'],
+    color: '#E8002D',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/ferrari-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/ferrari.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/MJXKPW_240117_SF_F1_FVasseur_Red_PR_AN_076161-1920x0_YRHUGH_%28close-up%29.jpg/330px-MJXKPW_240117_SF_F1_FVasseur_Red_PR_AN_076161-1920x0_YRHUGH_%28close-up%29.jpg',
+    principalBio: 'Frédéric Vasseur took charge of Scuderia Ferrari in January 2023. A veteran team boss with stints at Renault, Lotus and Alfa Romeo, he is known for his driver development eye — having nurtured Charles Leclerc and Kimi Räikkönen earlier in their careers.',
+  },
+  {
+    id: 'red_bull', name: 'Red Bull Racing', fullName: 'Oracle Red Bull Racing',
+    base: 'Milton Keynes, United Kingdom', principal: 'Christian Horner',
+    chassis: 'RB21', engine: 'Ford RBPT', drivers: ['max_verstappen', 'hadjar'],
+    color: '#3671C6',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/red-bull-racing-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/red-bull-racing.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Horner_at_F1_Live_in_London_02.jpg/330px-Horner_at_F1_Live_in_London_02.jpg',
+    principalBio: 'Christian Horner has led Red Bull Racing since its formation in 2005, becoming the most successful team principal of the modern era. Under his leadership the team won four consecutive Constructors\' Championships from 2010–2013 and again in 2022–2023.',
+  },
+  {
+    id: 'mercedes', name: 'Mercedes', fullName: 'Mercedes-AMG PETRONAS F1 Team',
+    base: 'Brackley, United Kingdom', principal: 'Toto Wolff',
+    chassis: 'W16', engine: 'Mercedes', drivers: ['russell', 'antonelli'],
+    color: '#27F4D2',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/mercedes-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/mercedes.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Toto_Wolff_2022_%2852474843183%29_%28cropped%29.jpg/330px-Toto_Wolff_2022_%2852474843183%29_%28cropped%29.jpg',
+    principalBio: 'Toto Wolff joined Mercedes as Team Principal and CEO in 2013. He oversaw an unprecedented run of eight consecutive Constructors\' Championships from 2014 to 2021, cementing Mercedes as the dominant force of the hybrid era.',
+  },
+  {
+    id: 'aston_martin', name: 'Aston Martin', fullName: 'Aston Martin Aramco F1 Team',
+    base: 'Silverstone, United Kingdom', principal: 'Andy Cowell',
+    chassis: 'AMR26', engine: 'Honda', drivers: ['alonso', 'stroll'],
+    color: '#229971',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/aston-martin-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/aston-martin.png',
+    principalPhoto: null,
+    principalBio: 'Andy Cowell became Aston Martin Team Principal in 2024, bringing deep engineering expertise from his time as Managing Director of Mercedes-AMG High Performance Powertrains, where he oversaw the development of the dominant V6 hybrid engine.',
+  },
+  {
+    id: 'alpine', name: 'Alpine', fullName: 'BWT Alpine F1 Team',
+    base: 'Enstone, United Kingdom', principal: 'Oliver Oakes',
+    chassis: 'A525', engine: 'Renault', drivers: ['gasly', 'colapinto'],
+    color: '#FF87BC',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/alpine-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/alpine.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Oliver_Oakes_2007_FRenault_Eurocup.jpg/330px-Oliver_Oakes_2007_FRenault_Eurocup.jpg',
+    principalBio: 'Oliver Oakes became Alpine\'s Team Principal in 2024 at just 37, making him one of the youngest team bosses in F1 history. He previously founded and ran Hitech Grand Prix, a successful junior formula team.',
+  },
+  {
+    id: 'haas', name: 'Haas', fullName: 'MoneyGram Haas F1 Team',
+    base: 'Kannapolis, United States', principal: 'Ayao Komatsu',
+    chassis: 'VF-25', engine: 'Ferrari', drivers: ['ocon', 'bearman'],
+    color: '#B6BABD',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/haas-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/haas.png',
+    principalPhoto: null,
+    principalBio: 'Ayao Komatsu was appointed Haas Team Principal in 2024 after serving as Chief Engineer. A Japanese engineer who joined the team at its inception in 2016, he is known for his technical precision and calm leadership style.',
+  },
+  {
+    id: 'rb', name: 'Racing Bulls', fullName: 'Visa Cash App Racing Bulls F1 Team',
+    base: 'Faenza, Italy', principal: 'Laurent Mekies',
+    chassis: 'VCARB 02', engine: 'Honda', drivers: ['lawson', 'arvid_lindblad'],
+    color: '#6692FF',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/rb-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/racing-bulls.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Laurent_Mekies_%2854917242735%29_%28cropped%29.jpg/330px-Laurent_Mekies_%2854917242735%29_%28cropped%29.jpg',
+    principalBio: 'Laurent Mekies joined Racing Bulls as Team Principal in 2023 after a decade at Ferrari, where he served as Sporting Director. A French engineer by training, he brings strong technical and strategic experience to the Red Bull junior team.',
+  },
+  {
+    id: 'williams', name: 'Williams', fullName: 'Williams Racing',
+    base: 'Grove, United Kingdom', principal: 'James Vowles',
+    chassis: 'FW47', engine: 'Mercedes', drivers: ['sainz', 'albon'],
+    color: '#64C4FF',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/williams-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/williams.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/James_Vowles_at_Goodwood_FOS.png/330px-James_Vowles_at_Goodwood_FOS.png',
+    principalBio: 'James Vowles joined Williams as Team Principal in 2023 after 20 years at Mercedes, where he was Chief Strategist. He is leading a full rebuild of the historic team, modernising its infrastructure and culture.',
+  },
+  {
+    id: 'kick_sauber', name: 'Audi', fullName: 'Audi F1 Team',
+    base: 'Hinwil, Switzerland', principal: 'Mattia Binotto',
+    chassis: 'C45', engine: 'Audi', drivers: ['hulkenberg', 'bortoleto'],
+    color: '#52E252',
+    logo: 'https://media.formula1.com/content/dam/fom-website/teams/2025/kick-sauber-logo.png',
+    car:  'https://media.formula1.com/content/dam/fom-website/teams/2025/kick-sauber.png',
+    principalPhoto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Mattia_Binotto%2C_2022_%28cropped%29.jpg/330px-Mattia_Binotto%2C_2022_%28cropped%29.jpg',
+    principalBio: 'Mattia Binotto leads the Audi F1 project after serving as Ferrari Team Principal from 2019–2022. An engineer by background, he oversaw Ferrari\'s technical renaissance and now heads Audi\'s ambitious works entry into Formula 1.',
+  },
+];
+
+async function loadTeams() {
+  const grid = document.getElementById('teams-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
+  loader(true);
+  const s = activeSeason;
+  try {
+    // Get current standings to show constructor points
+    const c = seasonCache(s);
+    const cs = c.constructorStandings || await apiFetch(`/api/${s}/standings/constructors`).then(d => { c.constructorStandings = d; return d; });
+    const pointsMap = {};
+    cs?.ConstructorStandings?.forEach(st => { pointsMap[st.Constructor.constructorId] = { points: st.points, position: st.position, wins: st.wins }; });
+
+    document.getElementById('teams-grid').innerHTML = TEAMS.map(team => {
+      const standing = pointsMap[team.id] || {};
+      const driverNames = team.drivers.map(id => {
+        const photo = driverPhoto(id);
+        const initials = id.replace(/_/g,' ').split(' ').map(x=>x[0]?.toUpperCase()||'').join('');
+        return `<div class="team-driver-chip">
+          <div class="team-driver-avatar" style="border-color:${team.color}">
+            ${photo ? `<img src="${photo}" alt="${id}" onerror="this.outerHTML='<span>${initials}</span>'">` : `<span>${initials}</span>`}
+          </div>
+        </div>`;
+      }).join('');
+
+      // Get driver full names from DRIVER_PHOTOS keys mapping
+      const driverLabels = team.drivers.map(id => {
+        const nameMap = {
+          'max_verstappen':'Max Verstappen','norris':'Lando Norris','leclerc':'Charles Leclerc',
+          'piastri':'Oscar Piastri','sainz':'Carlos Sainz','hamilton':'Lewis Hamilton',
+          'russell':'George Russell','perez':'Sergio Pérez','alonso':'Fernando Alonso',
+          'stroll':'Lance Stroll','gasly':'Pierre Gasly','ocon':'Esteban Ocon',
+          'albon':'Alexander Albon','tsunoda':'Yuki Tsunoda','bottas':'Valtteri Bottas',
+          'zhou':'Guanyu Zhou','magnussen':'Kevin Magnussen','hulkenberg':'Nico Hülkenberg',
+          'lawson':'Liam Lawson','colapinto':'Franco Colapinto','bearman':'Oliver Bearman',
+          'antonelli':'Kimi Antonelli','hadjar':'Isack Hadjar','doohan':'Jack Doohan',
+          'bortoleto':'Gabriel Bortoleto','arvid_lindblad':'Arvid Lindblad',
+        };
+        return nameMap[id] || id;
+      });
+
+      return `
+        <div class="team-card" data-id="${team.id}" style="--team-color:${team.color}">
+          <div class="team-card-car">
+            <img src="${team.car}" alt="${team.name} car"
+              onerror="this.closest('.team-card-car').classList.add('no-car')" />
+            ${standing.position ? `<span class="team-card-pos">P${standing.position}</span>` : ''}
+            ${standing.points ? `<span class="team-card-pts">${standing.points} pts</span>` : ''}
+          </div>
+          <div class="team-card-foot">
+            <img class="team-card-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display='none'" />
+            <div class="team-card-foot-info">
+              <div class="team-card-name">${team.name}</div>
+              <div class="team-card-hint">Tap to explore →</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Wire clicks
+    document.querySelectorAll('.team-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const team = TEAMS.find(t => t.id === card.dataset.id);
+        if (team) showTeamModal(team);
+      });
+    });
+  } catch(e) { console.error(e); }
+  loader(false);
+}
+
+function showTeamModal(team) {
+  const driverNameMap = {
+    'max_verstappen':'Max Verstappen','norris':'Lando Norris','leclerc':'Charles Leclerc',
+    'piastri':'Oscar Piastri','sainz':'Carlos Sainz','hamilton':'Lewis Hamilton',
+    'russell':'George Russell','perez':'Sergio Pérez','alonso':'Fernando Alonso',
+    'stroll':'Lance Stroll','gasly':'Pierre Gasly','ocon':'Esteban Ocon',
+    'albon':'Alexander Albon','lawson':'Liam Lawson','colapinto':'Franco Colapinto',
+    'bearman':'Oliver Bearman','antonelli':'Kimi Antonelli','hadjar':'Isack Hadjar',
+    'doohan':'Jack Doohan','bortoleto':'Gabriel Bortoleto','arvid_lindblad':'Arvid Lindblad',
+    'hulkenberg':'Nico Hülkenberg','bottas':'Valtteri Bottas',
+  };
+
+  const driversHtml = team.drivers.map(id => {
+    const name = driverNameMap[id] || id;
+    const photo = driverPhoto(id);
+    const initials = name.split(' ').map(x => x[0]).join('');
+    return `
+      <div class="team-modal-driver">
+        <div class="team-modal-driver-photo" style="border-color:${team.color}">
+          ${photo
+            ? `<img src="${photo}" alt="${name}" onerror="this.outerHTML='<span>${initials}</span>'">`
+            : `<span>${initials}</span>`}
+        </div>
+        <div class="team-modal-driver-name">${name}</div>
+      </div>`;
+  }).join('');
+
+  openModal(`
+    <div class="team-modal">
+      <div class="team-modal-header" style="border-color:${team.color}">
+        <img class="team-modal-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display='none'" />
+        <div>
+          <div class="team-modal-name" style="color:${team.color}">${team.name}</div>
+          <div class="team-modal-fullname">${team.fullName}</div>
+        </div>
+      </div>
+
+      <div class="team-modal-car-wrap">
+        <img src="${team.car}" alt="${team.name} car" onerror="this.closest('.team-modal-car-wrap').style.display='none'" />
+      </div>
+
+      <div class="team-modal-section-label">Drivers</div>
+      <div class="team-modal-drivers">${driversHtml}</div>
+
+      <div class="team-modal-section-label">Team Principal</div>
+      <div class="team-modal-principal">
+        <div class="team-modal-principal-photo">
+          ${team.principalPhoto
+            ? `<img src="${team.principalPhoto}" alt="${team.principal}" onerror="this.outerHTML='<div class=\\'tmp-initials\\'>${team.principal.split(' ').map(x=>x[0]).join('')}</div>'">`
+            : `<div class="tmp-initials">${team.principal.split(' ').map(x=>x[0]).join('')}</div>`}
+        </div>
+        <div class="team-modal-principal-info">
+          <div class="team-modal-principal-name">${team.principal}</div>
+          <div class="team-modal-principal-bio">${team.principalBio}</div>
+        </div>
+      </div>
+
+      <div class="team-modal-section-label">Technical</div>
+      <div class="team-modal-tech-grid">
+        <div class="team-meta-item"><span class="tm-label">Chassis</span><span class="tm-value">${team.chassis}</span></div>
+        <div class="team-meta-item"><span class="tm-label">Engine</span><span class="tm-value">${team.engine}</span></div>
+        <div class="team-meta-item"><span class="tm-label">Base</span><span class="tm-value">${team.base}</span></div>
+        <div class="team-meta-item"><span class="tm-label">Founded</span><span class="tm-value">${team.fullName}</span></div>
+      </div>
+    </div>`);
+}
+
 // ---- CIRCUITS ----
 async function loadCircuits() {
-  if (document.getElementById('circuits-grid').children.length) return;
+  const grid = document.getElementById('circuits-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
   loader(true);
   const s = activeSeason;
   try {

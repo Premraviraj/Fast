@@ -11,36 +11,43 @@
 </head>
 <body>
   <div class="progress-bar" id="progress-bar"></div>
-  <header>
-    <div class="header-inner">
-      <div class="logo">
-        <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <!-- steering wheel -->
-          <circle cx="16" cy="16" r="13" stroke="#e10600" stroke-width="2.2" fill="none"/>
-          <circle cx="16" cy="16" r="4.5" stroke="#e10600" stroke-width="2" fill="none"/>
-          <!-- spokes -->
-          <line x1="16" y1="3"  x2="16" y2="11.5" stroke="#e10600" stroke-width="2.2" stroke-linecap="round"/>
-          <line x1="16" y1="20.5" x2="16" y2="29" stroke="#e10600" stroke-width="2.2" stroke-linecap="round"/>
-          <line x1="3"  y1="16" x2="11.5" y2="16" stroke="#e10600" stroke-width="2.2" stroke-linecap="round"/>
-          <line x1="20.5" y1="16" x2="29" y2="16" stroke="#e10600" stroke-width="2.2" stroke-linecap="round"/>
+
+  <!-- HEADER: hamburger + logo + season filter -->
+  <header class="site-header">
+    <div class="site-header__inner">
+      <button class="hamburger" id="hamburger" aria-label="Toggle navigation">
+        <span></span><span></span>
+      </button>
+      <div class="site-logo">
+        <svg class="logo-icon" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" stroke="currentColor" stroke-width="2.2" fill="none"/>
+          <circle cx="16" cy="16" r="4.5" stroke="currentColor" stroke-width="2" fill="none"/>
+          <line x1="16" y1="3"  x2="16" y2="11.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="16" y1="20.5" x2="16" y2="29" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="3"  y1="16" x2="11.5" y2="16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="20.5" y1="16" x2="29" y2="16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
         </svg>
-        <span class="header-title">PITWALL</span>
+        <span class="site-logo__text">PITWALL</span>
       </div>
-      <nav>
-        <button class="nav-btn active" data-view="home">Home</button>
-        <button class="nav-btn" data-view="races">Schedule</button>
-        <button class="nav-btn" data-view="standings">Standings</button>
-        <button class="nav-btn" data-view="drivers">Drivers</button>
-        <button class="nav-btn" data-view="circuits">Circuits</button>
-      </nav>
       <div class="season-filter">
         <span class="season-filter-label">Season</span>
-        <div class="season-pills" id="season-pills">
-          <!-- built dynamically by app.js -->
-        </div>
+        <div class="season-pills" id="season-pills"></div>
       </div>
     </div>
   </header>
+
+  <!-- FULLSCREEN NAV OVERLAY (curtain wipe) -->
+  <nav class="nav-overlay" id="nav-overlay">
+    <ul class="nav-list">
+      <li class="nav-item"><button class="nav-btn active" data-view="home">Home</button></li>
+      <li class="nav-item"><button class="nav-btn" data-view="races">Schedule</button></li>
+      <li class="nav-item"><button class="nav-btn" data-view="standings">Standings</button></li>
+      <li class="nav-item"><button class="nav-btn" data-view="drivers">Drivers</button></li>
+      <li class="nav-item"><button class="nav-btn" data-view="circuits">Circuits</button></li>
+      <li class="nav-item"><button class="nav-btn" data-view="teams">Teams</button></li>
+    </ul>
+    <div class="nav-season-label" id="nav-season-label">2026 Season</div>
+  </nav>
 
   <main id="app">
     <div id="loader" class="loader hidden"><div class="spinner"></div></div>
@@ -111,6 +118,14 @@
       </div>
       <div id="circuits-grid" class="circuits-grid"></div>
     </section>
+
+    <!-- TEAMS -->
+    <section id="view-teams" class="view">
+      <div class="section-header">
+        <h2 class="section-title" id="teams-title">2026 Teams</h2>
+      </div>
+      <div id="teams-grid" class="teams-grid"></div>
+    </section>
   </main>
 
   <!-- MODAL -->
@@ -122,6 +137,7 @@
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="circuits.js"></script>
   <script src="app.js"></script>
 </body>
