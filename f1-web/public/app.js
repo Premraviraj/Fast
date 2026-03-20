@@ -21,7 +21,8 @@ async function initSeasons() {
   container.innerHTML = years.map((yr, i) => {
     const isCurrent = i === years.length - 1;
     const season = isCurrent ? 'current' : String(yr);
-    return `<button class="season-pill${isCurrent ? ' active' : ''}" data-season="${season}">${yr}</button>`;
+    const label = String(yr).slice(2); // "24", "25", "26"
+    return `<button class="season-pill${isCurrent ? ' active' : ''}" data-season="${season}" title="${yr} Season">${label}</button>`;
   }).join('');
 
   // Wire up pill clicks
@@ -202,11 +203,21 @@ const hamburger = document.getElementById('hamburger');
 const navOverlay = document.getElementById('nav-overlay');
 let navOpen = false;
 
-// Tooltip — show on load, dismiss on click or after 4s
+// Tooltip — show on load, dismiss on click or after 4s, then show season tip
 const hamburgerTip = document.getElementById('hamburger-tip');
 const tipTimer = setTimeout(() => hamburgerTip.classList.add('visible'), 800);
 const dismissTip = () => { hamburgerTip.classList.remove('visible'); clearTimeout(tipTimer); };
-setTimeout(dismissTip, 4800);
+setTimeout(() => {
+  dismissTip();
+  // Show season tip 0.5s after menu tip hides
+  setTimeout(() => {
+    const seasonTip = document.getElementById('season-tip');
+    if (seasonTip) {
+      seasonTip.classList.add('visible');
+      setTimeout(() => seasonTip.classList.remove('visible'), 3500);
+    }
+  }, 500);
+}, 4800);
 hamburger.addEventListener('click', dismissTip, { once: true });
 
 function openNav() {
@@ -900,16 +911,9 @@ function showTeamModal(team) {
 
   const driversHtml = team.drivers.map(id => {
     const name = driverNameMap[id] || id;
-    const photo = driverPhoto(id);
-    const initials = name.split(' ').map(x => x[0]).join('');
     return `
-      <div class="team-modal-driver">
-        <div class="team-modal-driver-photo" style="border-color:${team.color}">
-          ${photo
-            ? `<img src="${photo}" alt="${name}" onerror="this.outerHTML='<span>${initials}</span>'">`
-            : `<span>${initials}</span>`}
-        </div>
-        <div class="team-modal-driver-name">${name}</div>
+      <div class="team-modal-driver" style="border-color:${team.color}">
+        <div class="team-modal-driver-name" style="color:${team.color}">${name}</div>
       </div>`;
   }).join('');
 
