@@ -344,16 +344,18 @@ async function showRaceModal(round, season) {
               <div class="prob-info">
                 <div class="prob-name">${d.name}</div>
                 <div class="prob-team" style="color:${color}">${d.constructor}</div>
+                <div class="prob-bar-wrap">
+                  <div class="prob-bar" style="width:${d.probability}%;background:${color}"></div>
+                </div>
               </div>
-              <div class="prob-bar-wrap">
-                <div class="prob-bar" style="width:${d.probability}%;background:${color}"></div>
-              </div>
-              <div class="prob-pct">${d.probability}%</div>
-              <div class="prob-meta">
-                ${d.wins > 0 ? `<span class="prob-tag wins">${d.wins}W</span>` : ''}
-                ${d.podiums > 0 ? `<span class="prob-tag pods">${d.podiums}P</span>` : ''}
-                ${d.inForm ? `<span class="prob-tag form" title="Strong recent form">🔥</span>` : ''}
-                ${d.topCar ? `<span class="prob-tag car" title="Top car this season">⚡</span>` : ''}
+              <div class="prob-right">
+                <div class="prob-pct">${d.probability}%</div>
+                <div class="prob-meta">
+                  ${d.wins > 0 ? `<span class="prob-tag wins" title="${d.wins} win${d.wins>1?'s':''} at this circuit">${d.wins}W</span>` : ''}
+                  ${d.podiums > 0 ? `<span class="prob-tag pods" title="${d.podiums} podium${d.podiums>1?'s':''} at this circuit">${d.podiums}P</span>` : ''}
+                  ${d.inForm ? `<span class="prob-tag form" title="Strong form in last 2 races">🔥</span>` : ''}
+                  ${d.topCar ? `<span class="prob-tag car" title="Top 3 constructor this season">⚡</span>` : ''}
+                </div>
               </div>
             </div>`;
         }).join('');
