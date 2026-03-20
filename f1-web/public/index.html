@@ -40,14 +40,31 @@
 
   <!-- FULLSCREEN NAV OVERLAY (curtain wipe) -->
   <nav class="nav-overlay" id="nav-overlay">
-    <ul class="nav-list">
-      <li class="nav-item"><button class="nav-btn active" data-view="home">Home</button></li>
-      <li class="nav-item"><button class="nav-btn" data-view="races">Schedule</button></li>
-      <li class="nav-item"><button class="nav-btn" data-view="standings">Standings</button></li>
-      <li class="nav-item"><button class="nav-btn" data-view="drivers">Drivers</button></li>
-      <li class="nav-item"><button class="nav-btn" data-view="circuits">Circuits</button></li>
-      <li class="nav-item"><button class="nav-btn" data-view="teams">Teams</button></li>
-    </ul>
+    <div class="nav-inner">
+      <div class="nav-group">
+        <div class="nav-group-label">Race</div>
+        <ul class="nav-list">
+          <li class="nav-item"><button class="nav-btn active" data-view="home">Home</button></li>
+          <li class="nav-item"><button class="nav-btn" data-view="races">Schedule</button></li>
+          <li class="nav-item"><button class="nav-btn" data-view="standings">Standings</button></li>
+          <li class="nav-item"><button class="nav-btn" data-view="highlights">Highlights</button></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Paddock</div>
+        <ul class="nav-list">
+          <li class="nav-item"><button class="nav-btn" data-view="drivers">Drivers</button></li>
+          <li class="nav-item"><button class="nav-btn" data-view="teams">Teams</button></li>
+          <li class="nav-item"><button class="nav-btn" data-view="circuits">Circuits</button></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">Fan Zone</div>
+        <ul class="nav-list">
+          <li class="nav-item"><button class="nav-btn" data-view="merch">Merch</button></li>
+        </ul>
+      </div>
+    </div>
     <div class="nav-season-label" id="nav-season-label">2026 Season</div>
     <a class="nav-credit" href="https://strom-breaker.vercel.app/" target="_blank" rel="noopener">made by Prem R ↗</a>
   </nav>
@@ -128,6 +145,24 @@
         <h2 class="section-title" id="teams-title">2026 Teams</h2>
       </div>
       <div id="teams-grid" class="teams-grid"></div>
+    </section>
+
+    <!-- HIGHLIGHTS -->
+    <section id="view-highlights" class="view">
+      <div class="section-header">
+        <h2 class="section-title" id="highlights-title">2026 Race Highlights</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Official F1 race highlights — opens YouTube</p>
+      </div>
+      <div id="highlights-grid" class="highlights-grid"></div>
+    </section>
+
+    <!-- MERCH -->
+    <section id="view-merch" class="view">
+      <div class="section-header">
+        <h2 class="section-title">Official Merch</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Team stores · Driver merch · Legends · LEGO — opens official store</p>
+      </div>
+      <div id="merch-grid" class="merch-grid"></div>
     </section>
   </main>
 

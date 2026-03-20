@@ -41,10 +41,18 @@ async function initSeasons() {
 
   updateSeasonLabels();
 
-  // Show skeleton immediately on first load, then fetch after 0.5s delay
-  showSkeleton('home');
+  // Restore last visited page (or default to home)
+  const savedView = localStorage.getItem('pitwall_view') || 'home';
+  const seasonFilter = document.querySelector('.season-filter');
+
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === savedView));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(`view-${savedView}`)?.classList.add('active');
+  if (seasonFilter) seasonFilter.style.display = (savedView === 'teams' || savedView === 'merch') ? 'none' : '';
+
+  showSkeleton(savedView);
   await new Promise(r => setTimeout(r, 500));
-  loadHome();
+  loadView(savedView);
 }
 
 // ---- Skeleton loaders ----
@@ -104,6 +112,14 @@ function showSkeleton(view) {
     case 'teams':
       document.getElementById('teams-grid').innerHTML =
         skelCards(10, 'repeat(auto-fill, minmax(260px, 1fr))');
+      break;
+    case 'highlights':
+      document.getElementById('highlights-grid').innerHTML =
+        skelCards(8, 'repeat(auto-fill, minmax(280px, 1fr))');
+      break;
+    case 'merch':
+      document.getElementById('merch-grid').innerHTML =
+        skelCards(10, 'repeat(auto-fill, minmax(280px, 1fr))');
       break;
   }
 }
@@ -192,6 +208,7 @@ function clearView(view) {
   if (view === 'drivers') document.getElementById('drivers-grid').innerHTML = '';
   if (view === 'circuits') document.getElementById('circuits-grid').innerHTML = '';
   if (view === 'teams') document.getElementById('teams-grid').innerHTML = '';
+  if (view === 'highlights') document.getElementById('highlights-grid').innerHTML = '';
   if (view === 'home') {
     document.getElementById('home-cards').innerHTML = '';
     document.getElementById('last-race').innerHTML = '';
@@ -267,6 +284,8 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
       drivers: () => document.getElementById('drivers-grid'),
       circuits: () => document.getElementById('circuits-grid'),
       teams: () => document.getElementById('teams-grid'),
+      highlights: () => document.getElementById('highlights-grid'),
+      merch: () => document.getElementById('merch-grid'),
     };
     const el = containers[view]?.();
     if (el && !el.children.length) {
@@ -275,6 +294,13 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     }
 
     loadView(view);
+
+    // Hide season filter on teams and merch pages
+    const seasonFilter = document.querySelector('.season-filter');
+    if (seasonFilter) seasonFilter.style.display = (view === 'teams' || view === 'merch') ? 'none' : '';
+
+    // Persist active page
+    localStorage.setItem('pitwall_view', view);
   });
 });
 
@@ -307,6 +333,8 @@ async function loadView(view) {
   else if (view === 'drivers') await loadDrivers();
   else if (view === 'circuits') await loadCircuits();
   else if (view === 'teams') await loadTeams();
+  else if (view === 'highlights') await loadHighlights();
+  else if (view === 'merch') loadMerch();
 }
 
 // ---- HOME ----
@@ -1095,6 +1123,201 @@ async function showCircuitModal(circ, season) {
     const el = document.getElementById('circuit-champions');
     if (el) el.innerHTML = `<div style="color:var(--muted);font-size:13px">Could not load data.</div>`;
   }
+}
+
+// ---- HIGHLIGHTS ----
+async function loadHighlights() {
+  const grid = document.getElementById('highlights-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
+
+  const s = activeSeason;
+  const yr = seasonLabel(s);
+  document.getElementById('highlights-title').textContent = `${yr} Race Highlights`;
+
+  try {
+    const c = seasonCache(s);
+    const races = c.races || await apiFetch(`/api/${s}/races`).then(d => { c.races = d; return d; });
+
+    // For current season show only past races; for historical seasons show all
+    const isCurrent = s === 'current' || String(yr) === String(currentSeasonYear);
+    const visibleRaces = isCurrent ? races.filter(r => isDatePast(r.date)) : races;
+
+    if (!visibleRaces.length) {
+      grid.innerHTML = `<p style="color:var(--muted);font-size:14px">No races completed yet this season.</p>`;
+      return;
+    }
+
+    grid.innerHTML = visibleRaces.map(r => {
+      const query = encodeURIComponent(`F1 ${yr} ${r.raceName} Race Highlights`);
+      const ytSearch = `https://www.youtube.com/results?search_query=${query}`;
+      const country = r.Circuit.Location.country;
+      const color = `hsl(${(r.round * 47) % 360}, 60%, 18%)`;
+
+      return `
+        <a class="highlight-card" href="${ytSearch}" target="_blank" rel="noopener">
+          <div class="highlight-thumb">
+            <div class="highlight-thumb-bg" style="background:linear-gradient(135deg,${color},#111)">
+              <div class="highlight-thumb-inner">
+                <div class="highlight-thumb-flag">${country}</div>
+                <div class="highlight-thumb-round">R${r.round}</div>
+              </div>
+            </div>
+            <div class="highlight-play">
+              <svg viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+            </div>
+            <span class="highlight-yt-badge">YouTube ↗</span>
+          </div>
+          <div class="highlight-body">
+            <div class="highlight-round">Round ${r.round} · ${yr}</div>
+            <div class="highlight-name">${r.raceName}</div>
+            <div class="highlight-date">${formatDate(r.date)} · ${country}</div>
+          </div>
+        </a>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('highlights-grid').innerHTML =
+      `<p style="color:var(--muted);font-size:14px">Could not load highlights.</p>`;
+  }
+}
+
+// ---- MERCH ----
+const W = 'https://upload.wikimedia.org/wikipedia/commons/';
+const F1CDN = 'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/';
+
+const MERCH_PRODUCTS = [
+  // ---- TEAM STORES (official F1 CDN high-res PNGs) ----
+  { section:'teams', team:'McLaren',       teamColor:'#FF8000',
+    name:'McLaren Official Store',         price:'From £25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/b/bb/Mclaren_Logo_2021.svg',
+    url:'https://store.mclaren.com/en/formula1/team/' },
+  { section:'teams', team:'Ferrari',       teamColor:'#E8002D',
+    name:'Scuderia Ferrari Official Store', price:'From €30',
+    img:'https://upload.wikimedia.org/wikipedia/en/d/df/Scuderia_Ferrari_HP_logo_24.svg',
+    url:'https://f1store4.formula1.com/en/scuderia-ferrari/t-76758670+z-71034-984427031' },
+  { section:'teams', team:'Red Bull Racing', teamColor:'#3671C6',
+    name:'Red Bull Racing Official Store', price:'From €30',
+    img:'https://upload.wikimedia.org/wikipedia/commons/6/62/RED_BULL_LOGO_2026.svg',
+    url:'https://www.redbullshopus.com/collections/oracle-red-bull-racing' },
+  { section:'teams', team:'Mercedes-AMG',  teamColor:'#27F4D2',
+    name:'Mercedes-AMG Official Store',    price:'From £25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/f/fb/Mercedes_AMG_Petronas_F1_Logo.svg',
+    url:'https://shop-int.mercedesamgf1.com/' },
+  { section:'teams', team:'Aston Martin',  teamColor:'#229971',
+    name:'Aston Martin Official Store',    price:'From £25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/0/03/Aston_Martin_F1_Team_logo_2024.jpg',
+    url:'https://shop.astonmartinf1.com' },
+  { section:'teams', team:'Alpine',        teamColor:'#FF87BC',
+    name:'Alpine Official Store',          price:'From €25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/7/7e/Alpine_F1_Team_Logo.svg',
+    url:'https://f1store.formula1.com/en/bwt-alpine-f1-team' },
+  { section:'teams', team:'Williams',      teamColor:'#64C4FF',
+    name:'Williams Racing Official Store', price:'From £25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/7/7d/Williams_F1_logo_2026.png',
+    url:'https://store.williamsf1.com' },
+  { section:'teams', team:'Haas',          teamColor:'#B6BABD',
+    name:'Haas Official Store',            price:'From $25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/1/18/TGR_Haas_F1_Team_Logo_%282026%29.svg',
+    url:'https://www.tricorp.com/over-tricorp/sponsoring/tricorp-official-partner-moneygram-haas-f1-team' },
+  { section:'teams', team:'Racing Bulls',  teamColor:'#6692FF',
+    name:'Racing Bulls Official Store',    price:'From €25',
+    img:'https://upload.wikimedia.org/wikipedia/en/2/2b/VCARB_F1_logo.svg',
+    url:'https://www.redbullshopus.com/collections/visa-cash-app-racing-bulls' },
+  { section:'teams', team:'Audi / Sauber', teamColor:'#52E252',
+    name:'Kick Sauber Official Store',     price:'From €25',
+    img:'https://upload.wikimedia.org/wikipedia/commons/e/e4/Logo_of_Stake_F1_Team_Kick_Sauber.png',
+    url:'https://www.audirichmond.com/en/f1-merchandise/' },
+
+  // ---- LEGACY ----
+  { section:'legacy', team:'Legend', teamColor:'#e10600',
+    name:'Ayrton Senna — Official Collection',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/3/38/Ayrton_Senna_8_%28cropped%29.jpg',
+    url:'https://f1store.formula1.com/en/ayrton-senna' },
+  { section:'legacy', team:'Legend', teamColor:'#e10600',
+    name:'Michael Schumacher — Official Collection',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/d/d3/Michael_Schumacher_Ferrari_2004.jpg',
+    url:'https://f1store.formula1.com/en/michael-schumacher' },
+
+  // ---- LEGO Speed Champions 2025 F1 Collection ----
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Ferrari SF-24 Speed Champions #77242', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77242-1.jpg',
+    url:'https://www.lego.com/en-in/product/ferrari-sf-24-f1-race-car-77242' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Red Bull RB20 Speed Champions #77243', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77243-1.jpg',
+    url:'https://www.lego.com/en-in/product/oracle-red-bull-racing-rb20-f1-race-car-77243' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Mercedes W15 Speed Champions #77244', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77244-1.jpg',
+    url:'https://www.lego.com/en-in/product/mercedes-amg-f1-w15-race-car-77244' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Aston Martin AMR24 Speed Champions #77245', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77245-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Racing Bulls VCARB Speed Champions #77246', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77246-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Kick Sauber C44 Speed Champions #77247', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77247-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Alpine A524 Speed Champions #77248', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77248-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Williams FW46 Speed Champions #77249', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77249-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Haas VF-24 Speed Champions #77250', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77250-1.jpg',
+    url:'https://www.lego.com/en-in/themes/speed-champions' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'McLaren MCL38 Speed Champions #77251', price:'₹2,799',
+    img:'https://images.brickset.com/sets/images/77251-1.jpg',
+    url:'https://www.lego.com/en-in/product/mclaren-f1-team-mcl38-race-car-77251' },
+  { section:'lego', team:'LEGO', teamColor:'#FFD700',
+    name:'Red Bull RB20 Technic #42206', price:'₹14,999',
+    img:'https://images.brickset.com/sets/images/42206-1.jpg',
+    url:'https://www.lego.com/en-in/product/oracle-red-bull-racing-rb20-f1-car-42206' },
+];
+
+function loadMerch() {
+  const grid = document.getElementById('merch-grid');
+  if (grid.children.length && !grid.querySelector('.skel-card')) return;
+
+  const makeCard = (p, imgClass = '') => {
+    const initials = p.team.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase();
+    return `
+      <a class="merch-product-card merch-card--${p.section}" href="${p.url}" target="_blank" rel="noopener" style="--team-color:${p.teamColor}">
+        <div class="merch-product-img-wrap${imgClass ? ' ' + imgClass : ''}" style="border-bottom:2px solid ${p.teamColor}33">
+          <img src="${p.img}" alt="${p.name}" loading="lazy"
+            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+          <div class="merch-product-img-fallback" style="background:${p.teamColor}18;color:${p.teamColor}">
+            <span>${initials}</span>
+          </div>
+        </div>
+        <div class="merch-product-body">
+          <div class="merch-product-team-badge" style="color:${p.teamColor};border-color:${p.teamColor}44">${p.team}</div>
+          <div class="merch-product-name">${p.name}</div>
+          <div class="merch-product-footer">
+            ${p.price ? `<span class="merch-product-price">${p.price}</span>` : '<span></span>'}
+            <span class="merch-product-cta">Shop →</span>
+          </div>
+        </div>
+      </a>`;
+  };
+
+  grid.innerHTML = `
+    <div class="merch-section-title">Team Stores</div>
+    ${MERCH_PRODUCTS.filter(p=>p.section==='teams').map(p=>makeCard(p)).join('')}
+    <div class="merch-section-title">Legends</div>
+    ${MERCH_PRODUCTS.filter(p=>p.section==='legacy').map(p=>makeCard(p, 'merch-img-portrait')).join('')}
+    <div class="merch-section-title">LEGO Speed Champions — All 10 Teams + Technic</div>
+    ${MERCH_PRODUCTS.filter(p=>p.section==='lego').map(p=>makeCard(p, 'merch-img-lego')).join('')}
+  `;
 }
 
 // ---- Init ----
