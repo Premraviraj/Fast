@@ -48,31 +48,39 @@ const CIRCUIT_SVG_MAP = {
 const SVG_BASE = 'https://raw.githubusercontent.com/julesr0y/f1-circuits-svg/main/circuits/black-outline';
 
 module.exports = async (req, res) => {
-  const url = req.url;
+  res.setHeader('Access-Control-Allow-Origin', '*');
 
+  const url = req.url;
   // Strip leading /api
   const path = url.replace(/^\/api/, '').split('?')[0];
   const segments = path.split('/').filter(Boolean);
+
+  // Helper so we don't rely on res.json existing in all Vercel runtimes
+  const send = (data, status = 200) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.status(status).end(JSON.stringify(data));
+  };
 
   try {
     // GET /meta/season
     if (segments[0] === 'meta' && segments[1] === 'season') {
       const data = await f1get(`${BASE}/current/races.json?limit=1`);
-      return res.json({ season: parseInt(data.MRData.RaceTable.season) });
+      return send({ season: parseInt(data.MRData.RaceTable.season) });
     }
 
     // GET /circuit-svg/:circuitId
     if (segments[0] === 'circuit-svg') {
       const slug = CIRCUIT_SVG_MAP[segments[1]];
-      if (!slug) return res.status(404).send('');
+      if (!slug) { res.status(404).end(''); return; }
       const r = await fetch(`${SVG_BASE}/${slug}.svg`);
-      if (!r.ok) return res.status(404).send('');
+      if (!r.ok) { res.status(404).end(''); return; }
       let svg = await r.text();
       svg = svg.replace(/stroke:\s*#000[^;"]*/g, 'stroke:#e10600');
       svg = svg.replace(/stroke:\s*#fff[^;"]*/g, 'stroke:none');
       res.setHeader('Content-Type', 'image/svg+xml');
       res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.send(svg);
+      res.status(200).end(svg);
+      return;
     }
 
     // GET /probability/:circuitId
@@ -95,17 +103,15 @@ module.exports = async (req, res) => {
       ]);
 
       const scores = {};
-      function ensureDriver(id, name, constructor, constructorId) {
-        if (!scores[id]) scores[id] = { driverId: id, name, score: 0, wins: 0, podiums: 0, constructor, constructorId, formBoost: 0, carBoost: 0 };
+      function ensureDriver(id, name, ctor, ctorId) {
+        if (!scores[id]) scores[id] = { driverId: id, name, score: 0, wins: 0, podiums: 0, constructor: ctor, constructorId: ctorId, formBoost: 0, carBoost: 0 };
       }
 
-      const histWeights = [5,4,3,2,1];
-      historicalResults.forEach(({ race }, idx) => {
+      [5,4,3,2,1].forEach((w, idx) => {
+        const race = historicalResults[idx]?.race;
         if (!race?.Results) return;
-        const w = histWeights[idx] || 1;
         race.Results.slice(0,10).forEach(r => {
-          const id = r.Driver.driverId;
-          const pos = parseInt(r.position);
+          const id = r.Driver.driverId; const pos = parseInt(r.position);
           ensureDriver(id, `${r.Driver.givenName} ${r.Driver.familyName}`, r.Constructor.name, r.Constructor.constructorId);
           const pts = pos===1?10:pos===2?6:pos===3?4:pos<=6?2:1;
           scores[id].score += pts * w;
@@ -125,98 +131,87 @@ module.exports = async (req, res) => {
       }
 
       const carPaceMap = {};
-      if (constructorStandings?.ConstructorStandings) {
-        constructorStandings.ConstructorStandings.slice(0,10).forEach((s,idx) => {
-          carPaceMap[s.Constructor.constructorId] = Math.max(0,(10-idx))*0.8;
-        });
-      }
+      constructorStandings?.ConstructorStandings?.slice(0,10).forEach((s,idx) => {
+        carPaceMap[s.Constructor.constructorId] = Math.max(0,(10-idx))*0.8;
+      });
 
       [3,2].forEach((w, idx) => {
         const race = recentRaces[idx];
         if (!race?.Results) return;
         race.Results.slice(0,10).forEach(r => {
-          const id = r.Driver.driverId;
-          const pos = parseInt(r.position);
+          const id = r.Driver.driverId; const pos = parseInt(r.position);
           ensureDriver(id, `${r.Driver.givenName} ${r.Driver.familyName}`, r.Constructor.name, r.Constructor.constructorId);
           const pts = pos===1?8:pos===2?5:pos===3?3:pos<=6?2:1;
-          const fp = pts * w;
-          scores[id].score += fp;
-          scores[id].formBoost += fp;
+          const fp = pts * w; scores[id].score += fp; scores[id].formBoost += fp;
         });
       });
 
-      Object.values(scores).forEach(d => {
-        const pace = carPaceMap[d.constructorId] || 0;
-        d.score += pace;
-        d.carBoost = pace;
-      });
-
-      const sorted = Object.values(scores).sort((a,b) => b.score-a.score).slice(0,10);
-      const total = sorted.reduce((s,d) => s+d.score, 0);
-      return res.json(sorted.map(d => ({
+      Object.values(scores).forEach(d => { const p = carPaceMap[d.constructorId]||0; d.score+=p; d.carBoost=p; });
+      const sorted = Object.values(scores).sort((a,b)=>b.score-a.score).slice(0,10);
+      const total = sorted.reduce((s,d)=>s+d.score,0);
+      return send(sorted.map(d => ({
         driverId: d.driverId, name: d.name, constructor: d.constructor, constructorId: d.constructorId,
-        probability: total>0 ? Math.round((d.score/total)*100) : 0,
-        wins: d.wins, podiums: d.podiums,
-        inForm: d.formBoost > 6, topCar: d.carBoost >= 6,
+        probability: total>0?Math.round((d.score/total)*100):0,
+        wins: d.wins, podiums: d.podiums, inForm: d.formBoost>6, topCar: d.carBoost>=6,
       })));
     }
 
     // GET /:season/races
     if (segments[1] === 'races') {
       const data = await f1get(`${BASE}/${segments[0]}/races.json?limit=30`);
-      return res.json(data.MRData.RaceTable.Races);
+      return send(data.MRData.RaceTable.Races);
     }
 
     // GET /:season/results/last
     if (segments[1] === 'results' && segments[2] === 'last') {
       const data = await f1get(`${BASE}/${segments[0]}/last/results.json`);
-      return res.json(data.MRData.RaceTable.Races[0] || null);
+      return send(data.MRData.RaceTable.Races[0] || null);
     }
 
     // GET /:season/results/:round
     if (segments[1] === 'results' && segments[2]) {
       const data = await f1get(`${BASE}/${segments[0]}/${segments[2]}/results.json`);
-      return res.json(data.MRData.RaceTable.Races[0] || null);
+      return send(data.MRData.RaceTable.Races[0] || null);
     }
 
     // GET /:season/standings/drivers
     if (segments[1] === 'standings' && segments[2] === 'drivers') {
       const data = await f1get(`${BASE}/${segments[0]}/driverStandings.json`);
-      return res.json(data.MRData.StandingsTable.StandingsLists[0] || null);
+      return send(data.MRData.StandingsTable.StandingsLists[0] || null);
     }
 
     // GET /:season/standings/constructors
     if (segments[1] === 'standings' && segments[2] === 'constructors') {
       const data = await f1get(`${BASE}/${segments[0]}/constructorStandings.json`);
-      return res.json(data.MRData.StandingsTable.StandingsLists[0] || null);
-    }
-
-    // GET /:season/circuits
-    if (segments[1] === 'circuits' && !segments[2]) {
-      const data = await f1get(`${BASE}/${segments[0]}/circuits.json?limit=30`);
-      return res.json(data.MRData.CircuitTable.Circuits);
+      return send(data.MRData.StandingsTable.StandingsLists[0] || null);
     }
 
     // GET /:season/circuits/:circuitId/results
     if (segments[1] === 'circuits' && segments[3] === 'results') {
       const data = await f1get(`${BASE}/${segments[0]}/circuits/${segments[2]}/results.json?limit=1`);
-      return res.json(data.MRData.RaceTable.Races[0] || null);
+      return send(data.MRData.RaceTable.Races[0] || null);
     }
 
-    // GET /:season/drivers
-    if (segments[1] === 'drivers' && !segments[2]) {
-      const data = await f1get(`${BASE}/${segments[0]}/drivers.json?limit=30`);
-      return res.json(data.MRData.DriverTable.Drivers);
+    // GET /:season/circuits
+    if (segments[1] === 'circuits') {
+      const data = await f1get(`${BASE}/${segments[0]}/circuits.json?limit=30`);
+      return send(data.MRData.CircuitTable.Circuits);
     }
 
     // GET /:season/driver/:driverId/results
     if (segments[1] === 'driver' && segments[3] === 'results') {
       const data = await f1get(`${BASE}/${segments[0]}/drivers/${segments[2]}/results.json?limit=30`);
-      return res.json(data.MRData.RaceTable.Races);
+      return send(data.MRData.RaceTable.Races);
     }
 
-    res.status(404).json({ error: 'Not found' });
+    // GET /:season/drivers
+    if (segments[1] === 'drivers') {
+      const data = await f1get(`${BASE}/${segments[0]}/drivers.json?limit=30`);
+      return send(data.MRData.DriverTable.Drivers);
+    }
+
+    send({ error: 'Not found' }, 404);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    send({ error: e.message }, 500);
   }
 };

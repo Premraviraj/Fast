@@ -1,5 +1,13 @@
 {
+  "version": 2,
+  "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/handler" }
-  ]
+    { "source": "/api/:path*", "destination": "/api/handler" }
+  ],
+  "functions": {
+    "api/handler.js": {
+      "memory": 512,
+      "maxDuration": 15
+    }
+  }
 }
