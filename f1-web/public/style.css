@@ -96,6 +96,40 @@ body {
 .hamburger.open span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
 .hamburger.open span:nth-child(2) { transform: translateY(-8px) rotate(-45deg); }
 
+/* Tooltip bubble */
+.hamburger-tip {
+  position: absolute;
+  top: 52px;
+  left: 16px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  /* arrow */
+  transform: translateY(6px);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 500;
+}
+.hamburger-tip::before {
+  content: '';
+  position: absolute;
+  top: -5px; left: 14px;
+  width: 10px; height: 10px;
+  background: #fff;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+.hamburger-tip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* ---- FULLSCREEN NAV OVERLAY ---- */
 .nav-overlay {
   position: fixed;

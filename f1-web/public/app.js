@@ -202,6 +202,13 @@ const hamburger = document.getElementById('hamburger');
 const navOverlay = document.getElementById('nav-overlay');
 let navOpen = false;
 
+// Tooltip — show on load, dismiss on click or after 4s
+const hamburgerTip = document.getElementById('hamburger-tip');
+const tipTimer = setTimeout(() => hamburgerTip.classList.add('visible'), 800);
+const dismissTip = () => { hamburgerTip.classList.remove('visible'); clearTimeout(tipTimer); };
+setTimeout(dismissTip, 4800);
+hamburger.addEventListener('click', dismissTip, { once: true });
+
 function openNav() {
   navOpen = true;
   hamburger.classList.add('open');
