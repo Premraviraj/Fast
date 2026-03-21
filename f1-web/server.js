@@ -81,6 +81,14 @@ app.get('/api/:season/driver/:driverId/results', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Driver lap times for a specific race
+app.get('/api/:season/:round/driver/:driverId/laps', async (req, res) => {
+  try {
+    const data = await f1get(`${BASE}/${req.params.season}/${req.params.round}/drivers/${req.params.driverId}/laps.json?limit=100`);
+    res.json(data.MRData.RaceTable.Races[0]?.Laps || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Circuit race results for a season
 app.get('/api/:season/circuits/:circuitId/results', async (req, res) => {
   try {

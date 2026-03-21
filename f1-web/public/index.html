@@ -61,6 +61,7 @@
       <div class="nav-group">
         <div class="nav-group-label">Fan Zone</div>
         <ul class="nav-list">
+          <li class="nav-item"><button class="nav-btn" data-view="compare">Compare</button></li>
           <li class="nav-item"><button class="nav-btn" data-view="merch">Merch</button></li>
         </ul>
       </div>
@@ -154,6 +155,62 @@
         <p style="color:var(--muted);font-size:13px;margin-top:4px">Official F1 race highlights — opens YouTube</p>
       </div>
       <div id="highlights-grid" class="highlights-grid"></div>
+    </section>
+
+    <!-- COMPARE -->
+    <section id="view-compare" class="view">
+      <div class="section-header">
+        <h2 class="section-title">Driver Comparison</h2>
+        <p style="color:var(--muted);font-size:13px;margin-top:4px">Head-to-head stats, points progression &amp; race finishes</p>
+      </div>
+      <div class="compare-controls">
+        <div class="compare-selectors">
+          <div class="compare-selector-wrap">
+            <label class="compare-label">Driver A</label>
+            <div class="compare-search-wrap">
+              <input class="compare-search" id="cmp-search-a" placeholder="Search driver…" autocomplete="off" />
+              <div class="compare-dropdown" id="cmp-drop-a"></div>
+            </div>
+            <div class="compare-selected-chip" id="cmp-selected-a"><span class="compare-selected-empty">Not selected</span></div>
+          </div>
+          <div class="compare-vs">VS</div>
+          <div class="compare-selector-wrap">
+            <label class="compare-label">Driver B</label>
+            <div class="compare-search-wrap">
+              <input class="compare-search" id="cmp-search-b" placeholder="Search driver…" autocomplete="off" />
+              <div class="compare-dropdown" id="cmp-drop-b"></div>
+            </div>
+            <div class="compare-selected-chip" id="cmp-selected-b"><span class="compare-selected-empty">Not selected</span></div>
+          </div>
+        </div>
+        <div class="compare-bottom-row">
+          <div class="compare-filter-group">
+            <label class="compare-label">Season</label>
+            <div class="season-pills" id="cmp-season-pills"></div>
+          </div>
+          <button class="compare-btn" id="cmp-run">Compare</button>
+        </div>
+      </div>
+      <div id="compare-results" class="compare-results hidden">
+        <div class="cmp-stats-table" id="cmp-stats"></div>
+        <div class="compare-chart-wrap">
+          <div class="compare-chart-header">
+            <div class="compare-chart-title">Points Progression</div>
+            <div class="cmp-chart-legend" id="cmp-legend-points"></div>
+          </div>
+          <canvas id="cmp-chart-points" height="240"></canvas>
+          <div class="cmp-tooltip" id="cmp-tip-points"></div>
+        </div>
+        <div class="compare-chart-wrap">
+          <div class="compare-chart-header">
+            <div class="compare-chart-title">Race Finish Positions</div>
+            <div class="cmp-chart-legend" id="cmp-legend-positions"></div>
+          </div>
+          <canvas id="cmp-chart-positions" height="240"></canvas>
+          <div class="cmp-tooltip" id="cmp-tip-positions"></div>
+        </div>
+      </div>
+      <div id="compare-empty" class="compare-empty">Select two drivers and hit Compare</div>
     </section>
 
     <!-- MERCH -->

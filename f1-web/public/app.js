@@ -48,7 +48,7 @@ async function initSeasons() {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === savedView));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(`view-${savedView}`)?.classList.add('active');
-  if (seasonFilter) seasonFilter.style.display = (savedView === 'teams' || savedView === 'merch') ? 'none' : '';
+  if (seasonFilter) seasonFilter.style.display = (savedView === 'teams' || savedView === 'merch' || savedView === 'compare') ? 'none' : '';
 
   showSkeleton(savedView);
   await new Promise(r => setTimeout(r, 500));
@@ -286,6 +286,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
       teams: () => document.getElementById('teams-grid'),
       highlights: () => document.getElementById('highlights-grid'),
       merch: () => document.getElementById('merch-grid'),
+      compare: () => document.getElementById('compare-empty'),
     };
     const el = containers[view]?.();
     if (el && !el.children.length) {
@@ -295,9 +296,9 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
     loadView(view);
 
-    // Hide season filter on teams and merch pages
+    // Hide season filter on teams, merch and compare pages
     const seasonFilter = document.querySelector('.season-filter');
-    if (seasonFilter) seasonFilter.style.display = (view === 'teams' || view === 'merch') ? 'none' : '';
+    if (seasonFilter) seasonFilter.style.display = (view === 'teams' || view === 'merch' || view === 'compare') ? 'none' : '';
 
     // Persist active page
     localStorage.setItem('pitwall_view', view);
@@ -335,6 +336,7 @@ async function loadView(view) {
   else if (view === 'teams') await loadTeams();
   else if (view === 'highlights') await loadHighlights();
   else if (view === 'merch') loadMerch();
+  else if (view === 'compare') initCompare();
 }
 
 // ---- HOME ----
@@ -905,7 +907,7 @@ async function loadTeams() {
             ${standing.points ? `<span class="team-card-pts">${standing.points} pts</span>` : ''}
           </div>
           <div class="team-card-foot">
-            <img class="team-card-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display='none'" />
+            <img class="team-card-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display=&quot;none&quot;" />
             <div class="team-card-foot-info">
               <div class="team-card-name">${team.name}</div>
               <div class="team-card-hint">Tap to explore →</div>
@@ -948,7 +950,7 @@ function showTeamModal(team) {
   openModal(`
     <div class="team-modal">
       <div class="team-modal-header" style="border-color:${team.color}">
-        <img class="team-modal-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display='none'" />
+        <img class="team-modal-logo" src="${team.logo}" alt="${team.name}" onerror="this.style.display=&quot;none&quot;" />
         <div>
           <div class="team-modal-name" style="color:${team.color}">${team.name}</div>
           <div class="team-modal-fullname">${team.fullName}</div>
@@ -1322,3 +1324,392 @@ function loadMerch() {
 
 // ---- Init ----
 initSeasons();
+
+// ---- COMPARE ----
+let cmpDriverA = null, cmpDriverB = null;
+let cmpAllDrivers = [];
+let cmpInited = false;
+const CMP_CDN = 'https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/';
+
+async function initCompare() {
+  if (cmpInited) return;
+  cmpInited = true;
+
+  const pillsContainer = document.getElementById('cmp-season-pills');
+  const yr = currentSeasonYear || new Date().getFullYear();
+  let cmpActiveSeason = 'current';
+
+  // Build season pills — current year down to 2022
+  const seasons = [];
+  for (let y = yr; y >= 2022; y--) seasons.push(y);
+  pillsContainer.innerHTML = seasons.map(y =>
+    `<button class="season-pill${y === yr ? ' active' : ''}" data-season="${y === yr ? 'current' : y}">${String(y).slice(2)}</button>`
+  ).join('');
+
+  pillsContainer.querySelectorAll('.season-pill').forEach(pill => {
+    pill.addEventListener('click', async () => {
+      pillsContainer.querySelectorAll('.season-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      cmpActiveSeason = pill.dataset.season;
+      cmpDriverA = null; cmpDriverB = null;
+      cmpSetChip('a', null); cmpSetChip('b', null);
+      document.getElementById('cmp-search-a').value = '';
+      document.getElementById('cmp-search-b').value = '';
+      document.getElementById('cmp-drop-a').innerHTML = '';
+      document.getElementById('cmp-drop-b').innerHTML = '';
+      document.getElementById('compare-results').classList.add('hidden');
+      document.getElementById('compare-empty').style.display = '';
+      await cmpLoadDriverList(cmpActiveSeason);
+    });
+  });
+
+  // Expose getter for runCompare
+  window._cmpGetSeason = () => cmpActiveSeason;
+
+  setupCmpSearch('a');
+  setupCmpSearch('b');
+  document.getElementById('cmp-run').addEventListener('click', runCompare);
+}
+
+async function cmpLoadDriverList(season) {
+  try {
+    const drivers = await apiFetch('/api/' + season + '/drivers');
+    cmpAllDrivers = drivers.map(d => ({
+      id: d.driverId,
+      name: d.givenName + ' ' + d.familyName,
+      code: d.code || d.driverId.slice(0,3).toUpperCase(),
+      number: d.permanentNumber || '',
+      img: CMP_CDN + d.driverId.charAt(0).toUpperCase() + '/' + d.driverId + '_2025/' + (d.code || d.driverId.slice(0,3).toUpperCase()) + '01_2025.png',
+    }));
+  } catch(e) { cmpAllDrivers = []; }
+}
+
+function cmpSetChip(slot, driver) {
+  const chip = document.getElementById('cmp-selected-' + slot);
+  if (!driver) {
+    chip.innerHTML = '<span class="compare-selected-empty">Not selected</span>';
+    return;
+  }
+  chip.innerHTML =
+    '<img src="' + driver.img + '" alt="' + driver.name + '" onerror="this.style.display=&quot;none&quot;" />' +
+    '<span class="compare-selected-name">' + driver.name + '</span>' +
+    '<span class="cmp-drop-code" style="margin-left:auto">' + driver.code + '</span>';
+}
+
+function setupCmpSearch(slot) {
+  const input = document.getElementById('cmp-search-' + slot);
+  const drop  = document.getElementById('cmp-drop-' + slot);
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
+    const matches = cmpAllDrivers.filter(d =>
+      d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q)
+    ).slice(0, 8);
+    if (!matches.length) { drop.innerHTML = ''; drop.classList.remove('open'); return; }
+    drop.innerHTML = matches.map(d =>
+      '<div class="cmp-drop-item" data-id="' + d.id + '" data-name="' + d.name + '" data-code="' + d.code + '" data-img="' + d.img + '">' +
+        '<img class="cmp-drop-avatar" src="' + d.img + '" alt="' + d.name + '" onerror="this.style.display=&quot;none&quot;" />' +
+        '<div class="cmp-drop-info">' +
+          '<span class="cmp-drop-name">' + d.name + '</span>' +
+          '<span class="cmp-drop-code">' + d.code + (d.number ? ' · #' + d.number : '') + '</span>' +
+        '</div>' +
+      '</div>'
+    ).join('');
+    drop.classList.add('open');
+  });
+
+  drop.addEventListener('click', e => {
+    const item = e.target.closest('.cmp-drop-item');
+    if (!item) return;
+    const driver = { id: item.dataset.id, name: item.dataset.name, code: item.dataset.code, img: item.dataset.img };
+    if (slot === 'a') cmpDriverA = driver; else cmpDriverB = driver;
+    cmpSetChip(slot, driver);
+    input.value = driver.name;
+    drop.innerHTML = ''; drop.classList.remove('open');
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !drop.contains(e.target)) {
+      drop.innerHTML = ''; drop.classList.remove('open');
+    }
+  });
+}
+
+async function runCompare() {
+  if (!cmpDriverA || !cmpDriverB) { alert('Please select both drivers.'); return; }
+  const season = window._cmpGetSeason ? window._cmpGetSeason() : (currentSeasonYear || new Date().getFullYear());
+  const btn = document.getElementById('cmp-run');
+  btn.textContent = 'Loading…'; btn.disabled = true;
+  try {
+    const [racesA, racesB] = await Promise.all([
+      apiFetch('/api/' + season + '/driver/' + cmpDriverA.id + '/results'),
+      apiFetch('/api/' + season + '/driver/' + cmpDriverB.id + '/results'),
+    ]);
+    renderCmpStats(racesA, racesB);
+    renderCmpCharts(racesA, racesB);
+    document.getElementById('compare-results').classList.remove('hidden');
+    document.getElementById('compare-empty').style.display = 'none';
+  } catch(e) {
+    alert('Failed to load data: ' + e.message);
+  } finally {
+    btn.textContent = 'Compare'; btn.disabled = false;
+  }
+}
+
+function cmpCalcStats(races) {
+  let wins = 0, podiums = 0, points = 0, dnfs = 0, poles = 0, totalPos = 0, finishes = 0;
+  races.forEach(race => {
+    const r = race.Results && race.Results[0];
+    if (!r) return;
+    const pos = parseInt(r.position);
+    points += parseFloat(r.points || 0);
+    if (pos === 1) wins++;
+    if (pos <= 3) podiums++;
+    if (r.grid === '1') poles++;
+    if (r.status && !r.status.startsWith('Finished') && isNaN(parseInt(r.status))) dnfs++;
+    if (!isNaN(pos)) { totalPos += pos; finishes++; }
+  });
+  return { wins, podiums, points, dnfs, poles, avgPos: finishes ? (totalPos / finishes).toFixed(1) : '—', races: races.length };
+}
+
+function renderCmpStats(racesA, racesB) {
+  const sA = cmpCalcStats(racesA), sB = cmpCalcStats(racesB);
+  const colorA = '#e10600', colorB = '#27F4D2';
+  const metrics = [
+    { label: 'Points',     a: sA.points,  b: sB.points },
+    { label: 'Wins',       a: sA.wins,    b: sB.wins },
+    { label: 'Podiums',    a: sA.podiums, b: sB.podiums },
+    { label: 'Poles',      a: sA.poles,   b: sB.poles },
+    { label: 'DNFs',       a: sA.dnfs,    b: sB.dnfs,   lower: true },
+    { label: 'Avg Finish', a: sA.avgPos,  b: sB.avgPos, lower: true },
+    { label: 'Races',      a: sA.races,   b: sB.races,  neutral: true },
+  ];
+
+  const rows = metrics.map(m => {
+    let clsA = '', clsB = '';
+    const av = parseFloat(m.a), bv = parseFloat(m.b);
+    if (!m.neutral && !isNaN(av) && !isNaN(bv) && av !== bv) {
+      const aWins = m.lower ? av < bv : av > bv;
+      clsA = aWins ? 'cmp-win' : 'cmp-lose';
+      clsB = aWins ? 'cmp-lose' : 'cmp-win';
+    }
+    const maxVal = Math.max(av || 0, bv || 0) || 1;
+    const wA = Math.round(((av || 0) / maxVal) * 100);
+    const wB = Math.round(((bv || 0) / maxVal) * 100);
+    const barA = clsA === 'cmp-win' ? colorA + '55' : colorA + '22';
+    const barB = clsB === 'cmp-win' ? colorB + '55' : colorB + '22';
+    return (
+      '<div class="cmp-stat-row">' +
+        '<div class="cmp-val-a ' + clsA + '">' + m.a + '</div>' +
+        '<div class="cmp-row-label">' + m.label + '</div>' +
+        '<div class="cmp-val-b ' + clsB + '">' + m.b + '</div>' +
+      '</div>' +
+      (!m.neutral ?
+        '<div class="cmp-bar-row">' +
+          '<div class="cmp-bar-a-wrap"><div class="cmp-bar" style="width:' + wA + '%;background:' + barA + ';border:1px solid ' + colorA + '44"></div></div>' +
+          '<div class="cmp-bar-sep"></div>' +
+          '<div class="cmp-bar-b-wrap"><div class="cmp-bar" style="width:' + wB + '%;background:' + barB + ';border:1px solid ' + colorB + '44"></div></div>' +
+        '</div>' : '')
+    );
+  }).join('');
+
+  document.getElementById('cmp-stats').innerHTML =
+    '<div class="cmp-stats-head">' +
+      '<div class="cmp-head-a" style="color:' + colorA + '">' + cmpDriverA.name + '</div>' +
+      '<div class="cmp-head-mid">Stat</div>' +
+      '<div class="cmp-head-b" style="color:' + colorB + '">' + cmpDriverB.name + '</div>' +
+    '</div>' + rows;
+}
+
+function renderCmpCharts(racesA, racesB) {
+  const colorA = '#e10600', colorB = '#27F4D2';
+  const allRaces = {};
+  racesA.concat(racesB).forEach(r => {
+    allRaces[r.round] = (r.raceName || 'R' + r.round).replace(' Grand Prix','').replace(' Prix','');
+  });
+  const rounds = Object.keys(allRaces).sort((a,b) => parseInt(a)-parseInt(b));
+  const labels = rounds.map(r => allRaces[r]);
+
+  const mapPoints = function(races) {
+    const m = {};
+    races.forEach(r => { m[r.round] = parseFloat((r.Results && r.Results[0] && r.Results[0].points) || 0); });
+    let cum = 0;
+    return rounds.map(r => { cum += (m[r] || 0); return cum; });
+  };
+  const mapPos = function(races) {
+    const m = {};
+    races.forEach(r => { m[r.round] = parseInt(r.Results && r.Results[0] && r.Results[0].position) || null; });
+    return rounds.map(r => m[r] || null);
+  };
+
+  const dsPoints = [
+    { label: cmpDriverA.name, data: mapPoints(racesA), color: colorA },
+    { label: cmpDriverB.name, data: mapPoints(racesB), color: colorB },
+  ];
+  const dsPos = [
+    { label: cmpDriverA.name, data: mapPos(racesA), color: colorA },
+    { label: cmpDriverB.name, data: mapPos(racesB), color: colorB },
+  ];
+
+  renderCmpLegend('cmp-legend-points', dsPoints);
+  renderCmpLegend('cmp-legend-positions', dsPos);
+  drawInteractiveChart('cmp-chart-points', 'cmp-tip-points', labels, dsPoints, { fill: true, yLabel: 'pts' });
+  drawInteractiveChart('cmp-chart-positions', 'cmp-tip-positions', labels, dsPos, { invertY: true, yMin: 1, yMax: 20, yLabel: 'P' });
+}
+
+function renderCmpLegend(id, datasets) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = datasets.map(ds =>
+    '<div class="cmp-legend-item">' +
+      '<div class="cmp-legend-dot" style="background:' + ds.color + '"></div>' +
+      '<span>' + ds.label + '</span>' +
+    '</div>'
+  ).join('');
+}
+
+function drawInteractiveChart(canvasId, tipId, labels, datasets, opts) {
+  opts = opts || {};
+  const canvas = document.getElementById(canvasId);
+  const tip = document.getElementById(tipId);
+  if (!canvas) return;
+
+  // Replace canvas to remove old listeners
+  const fresh = canvas.cloneNode(false);
+  fresh.setAttribute('height', canvas.getAttribute('height') || '240');
+  canvas.parentNode.replaceChild(fresh, canvas);
+
+  fresh.width = fresh.parentElement.clientWidth || 800;
+  fresh.height = parseInt(fresh.getAttribute('height')) || 240;
+  const W = fresh.width, H = fresh.height;
+  const pad = { top: 16, right: 16, bottom: 36, left: 44 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  const allVals = datasets.reduce(function(acc, d) { return acc.concat(d.data.filter(function(v){ return v !== null; })); }, []);
+  let yMin = opts.yMin !== undefined ? opts.yMin : Math.min.apply(null, allVals.concat([0]));
+  let yMax = opts.yMax !== undefined ? opts.yMax : Math.max.apply(null, allVals);
+  if (yMin === yMax) yMax = yMin + 1;
+  const yRange = yMax - yMin;
+
+  const xStep = labels.length > 1 ? cW / (labels.length - 1) : cW;
+  const toX = function(i) { return pad.left + i * xStep; };
+  const toY = function(v) {
+    if (v === null) return null;
+    if (opts.invertY) return pad.top + ((v - yMin) / yRange) * cH;
+    return pad.top + (1 - (v - yMin) / yRange) * cH;
+  };
+
+  function draw(hoverIdx) {
+    const ctx = fresh.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = pad.top + (i / 4) * cH;
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+      const val = opts.invertY
+        ? Math.round(yMin + (i / 4) * yRange)
+        : Math.round(yMax - (i / 4) * yRange);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '10px Inter,sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(val, pad.left - 5, y + 4);
+    }
+
+    // X labels
+    const step = Math.ceil(labels.length / 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '10px Inter,sans-serif';
+    ctx.textAlign = 'center';
+    labels.forEach(function(lbl, i) {
+      if (i % step !== 0 && i !== labels.length - 1) return;
+      ctx.fillText(lbl, toX(i), H - 6);
+    });
+
+    // Hover line
+    if (hoverIdx >= 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toX(hoverIdx), pad.top);
+      ctx.lineTo(toX(hoverIdx), pad.top + cH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Lines
+    datasets.forEach(function(ds) {
+      const pts = ds.data.map(function(v, i) { return { x: toX(i), y: toY(v), i: i }; }).filter(function(p) { return p.y !== null; });
+      if (!pts.length) return;
+
+      if (opts.fill) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pad.top + cH);
+        pts.forEach(function(p) { ctx.lineTo(p.x, p.y); });
+        ctx.lineTo(pts[pts.length-1].x, pad.top + cH);
+        ctx.closePath();
+        ctx.fillStyle = ds.color + '15';
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.strokeStyle = ds.color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      pts.forEach(function(p, i) { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
+      ctx.stroke();
+
+      pts.forEach(function(p) {
+        const isHov = hoverIdx >= 0 && p.i === hoverIdx;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, isHov ? 5 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = ds.color;
+        ctx.fill();
+        if (isHov) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      });
+    });
+  }
+
+  draw(-1);
+
+  fresh.addEventListener('mousemove', function(e) {
+    const rect = fresh.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const idx = Math.max(0, Math.min(labels.length - 1, Math.round((mx - pad.left) / xStep)));
+    draw(idx);
+
+    const vals = datasets.map(function(ds) { return { label: ds.label, color: ds.color, val: ds.data[idx] }; });
+    if (tip) {
+      tip.innerHTML =
+        '<div class="cmp-tooltip-race">' + labels[idx] + '</div>' +
+        vals.map(function(v) {
+          const display = v.val !== null
+            ? (opts.invertY ? 'P' + v.val : v.val + (opts.yLabel === 'pts' ? ' pts' : ''))
+            : '—';
+          return '<div class="cmp-tooltip-row">' +
+            '<div class="cmp-tooltip-dot" style="background:' + v.color + '"></div>' +
+            '<span>' + v.label.split(' ').pop() + '</span>' +
+            '<span class="cmp-tooltip-val">' + display + '</span>' +
+          '</div>';
+        }).join('');
+      tip.classList.add('visible');
+      const tx = toX(idx);
+      tip.style.left = (tx > W * 0.65 ? tx - 155 : tx + 12) + 'px';
+      tip.style.top = (pad.top + 8) + 'px';
+    }
+  });
+
+  fresh.addEventListener('mouseleave', function() {
+    draw(-1);
+    if (tip) tip.classList.remove('visible');
+  });
+}
